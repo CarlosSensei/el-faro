@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, signal, viewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, output, signal, viewChild } from '@angular/core';
 import { Arena } from './engine/arena';
 import type { Battle, Journey } from './game.types';
 
@@ -78,6 +78,9 @@ import type { Battle, Journey } from './game.types';
                 @if (battle().phase === 'ready') {
                   <button class="secondary" (click)="practice()">Practicar combate</button>
                 }
+                @if (battle().phase === 'won' || battle().phase === 'lost') {
+                  <button type="button" class="secondary" (click)="exitGame.emit()">Salir</button>
+                }
               }
             </article>
           </div>
@@ -107,6 +110,7 @@ export class GameComponent implements AfterViewInit, OnDestroy {
   private readonly dialogueButton = viewChild<ElementRef<HTMLButtonElement>>('dialogueButton');
   private arena?: Arena;
 
+  readonly exitGame = output<void>();
   readonly journey = signal<Journey | null>(null);
   readonly battle = signal<Battle>({
     phase: 'ready',

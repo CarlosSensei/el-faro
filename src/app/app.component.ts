@@ -11,10 +11,12 @@ import { GameComponent } from '../game/game.component';
       <faro-comic (enterGame)="start()" />
     }
 
-    @defer (when playing()) {
-      <faro-game />
-    } @loading {
-      <p class="game-loading" role="status">Cargando el archipiélago…</p>
+    @if (playing()) {
+      @defer (when playing()) {
+        <faro-game (exitGame)="returnHome()" />
+      } @loading {
+        <p class="game-loading" role="status">Cargando el archipiélago…</p>
+      }
     }
   `,
 })
@@ -27,6 +29,11 @@ export class AppComponent {
     }
 
     this.playing.set(true);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  returnHome() {
+    this.playing.set(false);
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
 }
