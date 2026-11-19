@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, output, signal, viewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, input, OnDestroy, output, signal, viewChild } from '@angular/core';
 import { Arena } from './engine/arena';
 import type { Battle, GameAction, Journey } from './game.types';
 import { ACTION_LABELS, TouchControlsComponent } from './touch-controls.component';
@@ -20,7 +20,7 @@ import { ACTION_LABELS, TouchControlsComponent } from './touch-controls.componen
       <header>
         <span class="wordmark">✦ &nbsp; EL FARO DE LAS BRASAS</span>
         <div class="header-actions">
-          <span class="chapter">PRÓLOGO / {{ areaName() }}</span>
+          <span class="chapter">{{ forestChapter() ? 'CAPÍTULO II' : 'PRÓLOGO' }} / {{ areaName() }}</span>
           @if (!error()) {
             <button
               type="button"
@@ -45,8 +45,12 @@ import { ACTION_LABELS, TouchControlsComponent } from './touch-controls.componen
               <progress aria-label="Vida del aprendiz" [value]="battle().health" max="5"></progress>
             </div>
             <div>
-              <label>Guardián de ceniza</label>
-              <progress class="boss" aria-label="Vida del guardián" [value]="battle().boss" max="3"></progress>
+              <label>{{ forestChapter() ? 'Vigía de las Sombras' : 'Guardián de Ceniza' }}</label>
+              <progress
+                class="boss"
+                [attr.aria-label]="forestChapter() ? 'Vida del Vigía' : 'Vida del guardián'"
+                [value]="combat.boss"
+                max="3"></progress>
             </div>
           </div>
         }
@@ -80,13 +84,18 @@ import { ACTION_LABELS, TouchControlsComponent } from './touch-controls.componen
             </p>
           }
         } @else if (battle().phase !== 'playing' || error()) {
-          <div class="veil">
+          <div class="veil" [class.battle-result]="combat.phase === 'won' || combat.phase === 'lost'">
             <article>
               <span class="eyebrow">✦ &nbsp; {{ areaName() }}</span>
               <h1>{{ title() }}</h1>
               <p>{{ description() }}</p>
               @if (!error()) {
-                <button (click)="start()">
+                @if (combat.phase === 'won' && !forestChapter()) {
+                  <button type="button" (click)="continueAdventure.emit()">
+                    Continuar la aventura <span aria-hidden="true">→</span>
+                  </button>
+                }
+                <button type="button" [class.secondary]="combat.phase === 'won' && !forestChapter()" (click)="start()">
                   {{ buttonLabel() }} <span aria-hidden="true">→</span>
                 </button>
                 @if (battle().phase === 'ready') {
@@ -141,6 +150,8 @@ export class GameComponent implements AfterViewInit, OnDestroy {
 
   readonly touchEnabled = signal(this.touchMedia.matches);
   readonly actionLabels = ACTION_LABELS;
+  readonly forestChapter = input(false);
+  readonly continueAdventure = output<void>();
   readonly exitGame = output<void>();
   readonly journey = signal<Journey | null>(null);
   readonly battle = signal<Battle>({
@@ -197,6 +208,7 @@ export class GameComponent implements AfterViewInit, OnDestroy {
             requestAnimationFrame(() => this.dialogueButton()?.nativeElement.focus());
           }
         },
+        this.forestChapter(),
       );
     } catch (error) {
       console.error(error);
@@ -223,6 +235,8 @@ export class GameComponent implements AfterViewInit, OnDestroy {
   }
 
   areaName() {
+    if (this.forestChapter()) return this.journey() ? 'BOSQUE DEL ALBA' : 'LAS RUINAS';
+
     const area = this.journey()?.area;
 
     switch (area) {
@@ -246,9 +260,9 @@ export class GameComponent implements AfterViewInit, OnDestroy {
       case 'lost':
         return 'Reintentar combate';
       case 'won':
-        return 'Rejugar el prólogo';
+        return this.forestChapter() ? 'Volver a explorar el bosque' : 'Rejugar el prólogo';
       default:
-        return 'Explorar la isla';
+        return this.forestChapter() ? 'Explorar el bosque' : 'Explorar la isla';
     }
   }
 
@@ -257,11 +271,11 @@ export class GameComponent implements AfterViewInit, OnDestroy {
 
     switch (this.battle().phase) {
       case 'won':
-        return 'El faro vuelve a arder';
+        return this.forestChapter() ? 'El mapa de Vardren' : 'El faro vuelve a arder';
       case 'lost':
         return 'La brasa se apaga';
       default:
-        return 'El Faro de las Brasas';
+        return this.forestChapter() ? 'El bosque sin alba' : 'El Faro de las Brasas';
     }
   }
 
@@ -270,10 +284,19 @@ export class GameComponent implements AfterViewInit, OnDestroy {
 
     switch (this.battle().phase) {
       case 'won':
-        return 'La salamandra lleva la primera chispa al faro. Los barcos ya pueden volver a casa.';
+        return this.forestChapter()
+          ? 'Con la llama recuperada, Brasa ilumina un mapa en el altar. Los faros apagados forman un círculo. '
+            + 'En el centro está la ciudad donde debe salir el sol mañana.'
+          : 'Los barcos recuperan el rumbo. Desde el acantilado, ves apagarse los faros del continente, uno tras otro.';
       case 'lost':
+        if (this.forestChapter()) {
+          return this.touchEnabled()
+            ? 'Tras esquivar, revela al Vigía con Luz. Abre su defensa con Espada y vuelve a usar Luz.'
+            : 'Tras esquivar, revela al Vigía con H. Abre su defensa con G y vuelve a pulsar H.';
+        }
         return 'Sal del círculo rojo antes del golpe. Acércate cuando el guardián quede expuesto.';
       default:
+        if (this.forestChapter()) return 'Busca las marcas de los guardianes y recupera la llama robada.';
         return 'El faro se ha apagado y los barcos siguen en el mar. '
           + 'Busca a Mara en la aldea y descubre cómo devolverles la luz.';
     }

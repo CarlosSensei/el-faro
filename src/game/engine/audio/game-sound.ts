@@ -1,10 +1,13 @@
 const SOUNDS = {
   dodge: [240, 530, .18, 'sine'],
   sword: [490, 145, .16, 'triangle'],
+  blocked: [710, 310, .12, 'square'],
   armor: [620, 260, .24, 'triangle'],
   charge: [80, 135, .58, 'sine'],
   slam: [145, 42, .34, 'triangle'],
+  shadow: [235, 48, .48, 'sine'],
   light: [360, 940, .42, 'sine'],
+  radiance: [1280, 510, .35, 'triangle'],
   victory: [440, 880, .85, 'triangle'],
 } as const;
 

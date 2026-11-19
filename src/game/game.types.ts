@@ -1,4 +1,4 @@
-export type JourneyArea = 'village' | 'trail' | 'lighthouse' | 'coast';
+export type JourneyArea = 'village' | 'trail' | 'lighthouse' | 'coast' | 'forest';
 export type JourneyAction = 'F' | 'H' | '';
 
 export interface Journey {

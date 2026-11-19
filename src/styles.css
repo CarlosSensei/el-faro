@@ -67,6 +67,17 @@ footer {
   inset: 0;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .battle-result {
+    animation: show-battle-result .32s .22s both;
+  }
+}
+
+@keyframes show-battle-result {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 canvas {
   display: block;
 }

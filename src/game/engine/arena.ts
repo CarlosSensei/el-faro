@@ -1,9 +1,10 @@
 import * as T from 'three';
 import { GameSound } from './audio/game-sound';
-import { moveOnGround } from './combat/collision';
-import { BrasaLight, CombatEffects } from './combat/effects';
-import { makeApprentice, makeBrasa, makeGolem } from './entities/characters';
+import { moveOnGround, type Obstacle } from './combat/collision';
+import { BrasaLight, CombatEffects, LIGHT_DURATION } from './combat/effects';
+import { makeApprentice, makeBrasa, makeGolem, makeWatcher } from './entities/characters';
 import type { Battle, BattleAction, BattleCue, GameAction, Journey, JourneyArea } from '../game.types';
+import { BRIDGE_MARK, buildForest, FOREST_SPAWN_Z, RUINS, RUINS_CENTER_Z, TRACK_MARK } from './world/forest';
 import {
   BATTLE_CENTER_Z,
   BEACON_POSITION,
@@ -20,6 +21,8 @@ const SWORD_RANGE = 3.35;
 const LIGHT_RANGE = 4.5;
 const CHARGE_TIME = 1.5;
 const DASH_TIME = .3;
+const STRIKE_TIME = .32;
+const SLAM_POSE_TIME = .38;
 const ARENA_RADIUS = 7.2;
 const MOVEMENT_KEYS = new Set([
   'KeyW',
@@ -45,8 +48,8 @@ export class Arena {
   private readonly apprentice = makeApprentice();
   private readonly hero = this.apprentice.model;
   private readonly cameraAnchor = new T.Vector3();
-  private readonly golem = makeGolem();
-  private readonly guardian = this.golem.model;
+  private readonly enemy;
+  private readonly guardian;
   private readonly brasa = makeBrasa();
   private readonly pet = this.brasa.body;
   private readonly brasaLight = new BrasaLight();
@@ -57,13 +60,17 @@ export class Arena {
   private readonly chargeFill = mesh(new T.CircleGeometry(STRIKE_RADIUS, 48), 0xff664f, true);
   private readonly reach = mesh(new T.RingGeometry(.96, 1, 48), 0xffda89, true);
   private readonly flash = mesh(new T.RingGeometry(.82, 1, 48), 0xffd588, true);
-  private readonly sanctuary = buildSanctuary(this.scene, ISLAND_RADIUS, BATTLE_CENTER_Z);
-  private readonly prologue = buildPrologue();
-  private readonly obstacles = [...this.prologue.obstacles, ...this.sanctuary.obstacles];
+  private readonly prologue?: ReturnType<typeof buildPrologue>;
+  private readonly forest?: ReturnType<typeof buildForest>;
+  private readonly flameLight;
+  private readonly battleCenterZ: number;
+  private obstacles: readonly Obstacle[];
+  private forestMarks = 0;
+  private watcherRevealed = false;
   private readonly reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private readonly effects = new CombatEffects(this.reducedMotion);
   private readonly sound = new GameSound();
-  private readonly guardianArms = ['leftArm', 'rightArm'].map(name => this.guardian.getObjectByName(name)!);
+  private readonly guardianArms;
   private walking = false;
   private walkPhase = 0;
   private readonly keys = new Set<string>();
@@ -82,6 +89,8 @@ export class Arena {
   private dodgeGrace = 0;
   private firstAttack = true;
   private strike = 0;
+  private swordConnected = false;
+  private slamPose = 0;
   private pulse = 0;
   private hurt = 0;
   private state: Battle = {
@@ -101,7 +110,24 @@ export class Arena {
     private readonly host: HTMLElement,
     private readonly publish: (battle: Battle) => void,
     private readonly publishJourney: (journey: Journey | null) => void,
+    forestChapter = false,
   ) {
+    this.battleCenterZ = forestChapter ? RUINS_CENTER_Z : BATTLE_CENTER_Z;
+    if (forestChapter) {
+      this.forest = buildForest(this.scene);
+      this.flameLight = this.forest.flameLight;
+      this.obstacles = [...this.forest.obstacles, this.forest.bridgeLock];
+    } else {
+      const sanctuary = buildSanctuary(this.scene, ISLAND_RADIUS, this.battleCenterZ);
+      this.prologue = buildPrologue();
+      this.flameLight = sanctuary.flameLight;
+      this.obstacles = [...this.prologue.obstacles, ...sanctuary.obstacles];
+      this.scene.add(this.prologue.scenery);
+    }
+    this.enemy = forestChapter ? makeWatcher() : makeGolem();
+    this.guardian = this.enemy.model;
+    this.guardianArms = ['leftArm', 'rightArm'].map(name => this.guardian.getObjectByName(name)!);
+
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.toneMapping = T.ACESFilmicToneMapping;
@@ -122,7 +148,7 @@ export class Arena {
     this.warning.renderOrder = 1;
     this.chargeFill.renderOrder = 2;
     this.scene.add(this.hero, this.guardian, this.pet, this.warning, this.chargeFill, this.reach, this.flash);
-    this.scene.add(this.prologue.scenery, this.effects.group, this.brasaLight.group);
+    this.scene.add(this.effects.group, this.brasaLight.group);
 
     this.resetPositions();
     this.updateCamera(0, true);
@@ -132,7 +158,10 @@ export class Arena {
     window.addEventListener('keydown', this.keyDown);
     window.addEventListener('keyup', this.keyUp);
     window.addEventListener('blur', this.clearInput);
-    this.frame = requestAnimationFrame(this.tick);
+    this.frame = requestAnimationFrame(now => {
+      if (this.forest) this.beginJourney();
+      this.tick(now);
+    });
   }
 
   setAudio(enabled: boolean) {
@@ -154,7 +183,7 @@ export class Arena {
   }
 
   private resetJourney() {
-    this.resetPositions(SPAWN_Z);
+    this.resetPositions(this.forest ? FOREST_SPAWN_Z : SPAWN_Z);
     this.clearInput();
     this.dash = 0;
     this.dashCooldown = 0;
@@ -163,10 +192,20 @@ export class Arena {
     this.pulse = 0;
     this.hurt = 0;
     this.guard = 'waiting';
-    this.guardian.visible = this.pet.visible = this.sword.visible = false;
-    this.sanctuary.flameLight.visible = false;
-    this.prologue.beacon.setLit(false);
-    this.journey = { area: 'village', objective: '', action: '', dialogue: false };
+    this.guardian.visible = false;
+    this.pet.visible = this.sword.visible = !!this.forest;
+    this.flameLight.visible = false;
+    if (this.prologue) {
+      this.prologue.beacon.setLit(false);
+      this.prologue.archTop.visible = true;
+    }
+    if (this.forest) {
+      this.forestMarks = 0;
+      this.forest.path.bridge.visible = this.forest.path.tracks.visible = false;
+      this.forest.marks.forEach(mark => mark.setLit(false));
+      this.obstacles = [...this.forest.obstacles, this.forest.bridgeLock];
+    }
+    this.journey = { area: this.forest ? 'forest' : 'village', objective: '', action: '', dialogue: false };
     this.updateCamera(0, true);
     this.updateObjective();
   }
@@ -182,9 +221,26 @@ export class Arena {
     let objective: string;
     let action: Journey['action'] = '';
     const { x, z } = this.hero.position;
-    const area = this.currentJourneyArea(x, z);
+    const area = this.forest ? 'forest' : this.currentJourneyArea(x, z);
 
-    if (!this.spokeToGuide) {
+    if (this.forest) {
+      if (this.forestMarks < 2) {
+        const mark = this.forestMarks === 0 ? BRIDGE_MARK : TRACK_MARK;
+        if (this.near(mark, 2.5)) {
+          objective = 'Ilumina la marca de los guardianes.';
+          action = 'H';
+        } else {
+          objective = this.forestMarks === 0
+            ? 'Desde el embarcadero, busca la marca junto al río, al norte.'
+            : 'Cruza el puente y busca la segunda marca al norte.';
+        }
+      } else if (this.near(RUINS, 2.1)) {
+        objective = 'Entra en las ruinas y recupera la llama.';
+        action = 'F';
+      } else {
+        objective = 'Sigue las huellas luminosas hacia las ruinas.';
+      }
+    } else if (!this.spokeToGuide) {
       objective = 'Explora la isla. Habla con Mara en la aldea del sur para recoger la espada.';
       if (this.near(GUIDE_POSITION)) action = 'F';
     } else if (!this.litBeacon && this.near(BEACON_POSITION, 2.4)) {
@@ -217,18 +273,26 @@ export class Arena {
     if (!journey || journey.dialogue) return;
 
     if (action === 'H' && journey.action === 'H') {
-      this.litBeacon = true;
-      this.pulse = .45;
-      this.lightTarget.copy(this.prologue.beacon.target);
-      this.sound.play('light');
-      this.effects.burst(this.lightTarget, 0x8bf5d6);
-      this.prologue.beacon.setLit(true);
+      if (this.forest) {
+        const mark = this.forest.marks[this.forestMarks];
+        if (!mark) return;
+        this.forestMarks++;
+        this.illuminate(mark.target);
+        mark.setLit(true);
+        this.forest.path.bridge.visible = true;
+        this.forest.path.tracks.visible = this.forestMarks === 2;
+        this.obstacles = this.forest.obstacles;
+      } else if (this.prologue) {
+        this.litBeacon = true;
+        this.illuminate(this.prologue.beacon.target);
+        this.prologue.beacon.setLit(true);
+      }
       this.updateObjective();
       return;
     }
 
     if (action !== 'F' || journey.action !== 'F') return;
-    if (this.spokeToGuide) {
+    if (this.forest || this.spokeToGuide) {
       this.start(true);
       return;
     }
@@ -238,6 +302,13 @@ export class Arena {
     this.publishJourney(this.journey);
   }
 
+  private illuminate(target: T.Vector3) {
+    this.pulse = LIGHT_DURATION;
+    this.lightTarget.copy(target);
+    this.sound.play('light');
+    this.effects.burst(target, 0x8bf5d6);
+  }
+
   start(keepPosition = false) {
     const entryPosition = keepPosition ? this.hero.position.clone() : undefined;
     if (this.journey) {
@@ -245,7 +316,8 @@ export class Arena {
       this.publishJourney(null);
     }
     this.pet.visible = this.sword.visible = true;
-    this.sanctuary.flameLight.visible = false;
+    this.flameLight.visible = false;
+    if (this.prologue) this.prologue.archTop.visible = false;
     this.resetPositions();
     if (entryPosition) {
       this.hero.position.copy(entryPosition);
@@ -260,7 +332,8 @@ export class Arena {
     this.pulse = 0;
     this.hurt = 0;
     this.guard = 'waiting';
-    this.firstAttack = true;
+    this.firstAttack = !this.forest;
+    this.watcherRevealed = false;
     this.countdown = 1.1;
     this.state = {
       phase: 'playing',
@@ -273,13 +346,15 @@ export class Arena {
     this.publishCue();
   }
 
-  private resetPositions(spawnZ = BATTLE_CENTER_Z + 4) {
+  private resetPositions(spawnZ = this.battleCenterZ + 4) {
     this.effects.reset();
+    this.swordConnected = false;
+    this.slamPose = 0;
     this.walkPhase = 0;
     this.walking = false;
     this.hero.position.set(0, 0, spawnZ);
     this.hero.rotation.y = Math.PI;
-    this.guardian.position.set(0, 0, BATTLE_CENTER_Z - 2.6);
+    this.guardian.position.set(0, 0, this.battleCenterZ - 2.6);
     this.guardian.rotation.y = 0;
     this.guardian.visible = true;
     this.pet.position.set(-.75, .6, spawnZ + .4);
@@ -292,12 +367,13 @@ export class Arena {
 
   private updateCamera(dt: number, snap = false) {
     const targetX = this.journey ? this.hero.position.x : 0;
-    const targetZ = this.journey ? this.hero.position.z : BATTLE_CENTER_Z;
+    const targetZ = this.journey ? this.hero.position.z : this.battleCenterZ;
     const interpolation = snap || this.reducedMotion ? 1 : 1 - Math.exp(-6 * dt);
     this.cameraAnchor.x = T.MathUtils.lerp(this.cameraAnchor.x, targetX, interpolation);
     this.cameraAnchor.z = T.MathUtils.lerp(this.cameraAnchor.z, targetZ, interpolation);
-    this.camera.position.set(this.cameraAnchor.x, 15, 17 + this.cameraAnchor.z);
-    this.camera.lookAt(this.cameraAnchor);
+    const offset = this.effects.cameraOffset;
+    this.camera.position.set(this.cameraAnchor.x + offset.x, 15 + offset.y, 17 + this.cameraAnchor.z);
+    this.camera.lookAt(this.cameraAnchor.x + offset.x, offset.y, this.cameraAnchor.z);
   }
 
   private resize = () => {
@@ -353,6 +429,7 @@ export class Arena {
       this.dash = DASH_TIME;
       this.dodgeGrace = .48;
       this.dashCooldown = .65;
+      this.effects.beginDodge(this.hero.position);
       this.sound.play('dodge');
     }
     if (action === 'G' && this.strike <= 0) this.attackWithSword();
@@ -379,25 +456,35 @@ export class Arena {
     return this.hero.position.distanceTo(this.guardian.position) <= range;
   }
 
-  private attackWithSword() {
-    this.strike = .32;
+  private get watcherHidden() {
+    return !!this.forest && !this.watcherRevealed;
+  }
 
-    if (this.guard !== 'recovering' || !this.closeToGuardian(SWORD_RANGE)) {
-      this.sound.play('sword');
+  private attackWithSword() {
+    this.strike = STRIKE_TIME;
+    const inRange = this.closeToGuardian(SWORD_RANGE) && !this.watcherHidden;
+    this.swordConnected = inRange && this.guard === 'recovering';
+    if (!this.swordConnected) {
+      if (inRange) {
+        this.sound.play('blocked');
+        this.effects.burst(this.guardian.position.clone().setY(.92), 0xadd3e3, .65);
+      } else {
+        this.sound.play('sword');
+      }
       return;
     }
     this.sound.play('armor');
-    this.effects.burst(this.guardian.position, 0xffd58b);
+    this.effects.impact(this.guardian.position.clone().setY(1.12), 0xffbd62, 1.2);
     const target = this.guardian.position.clone().sub(this.hero.position);
     this.hero.rotation.y = Math.atan2(target.x, target.z);
     this.facing.copy(target.normalize());
     this.guard = 'open';
-    this.countdown = this.state.boss === 3 ? Infinity : 6;
+    this.countdown = !this.forest && this.state.boss === 3 ? Infinity : 6;
     this.publishCue();
   }
 
   private castBrasaLight() {
-    this.pulse = .45;
+    this.pulse = LIGHT_DURATION;
     this.lightTarget.copy(this.guardian.position).y = 1.37;
 
     if (!this.closeToGuardian(LIGHT_RANGE)) {
@@ -405,18 +492,27 @@ export class Arena {
     }
 
     this.sound.play('light');
+    if (this.watcherHidden && this.guard === 'recovering' && this.closeToGuardian(LIGHT_RANGE)) {
+      this.countdown = Math.max(this.countdown, 4);
+      this.watcherRevealed = true;
+      this.effects.impact(this.lightTarget, 0xd5a3ff, 1.15);
+      this.publishCue();
+      return;
+    }
     if (this.guard !== 'open' || !this.closeToGuardian(LIGHT_RANGE)) return;
 
-    this.effects.burst(this.guardian.position, 0x8bf5d6);
+    this.effects.impact(this.lightTarget, 0x8bf5d6, this.state.boss === 1 ? 1.85 : 1.5);
+    this.sound.play('radiance');
     this.state = { ...this.state, boss: this.state.boss - 1 };
     if (this.state.boss === 0) {
       this.guardian.visible = false;
-      this.sanctuary.flameLight.visible = true;
+      this.flameLight.visible = true;
       this.sound.play('victory');
       this.finish('won');
       return;
     }
     this.guard = 'waiting';
+    this.watcherRevealed = false;
     this.countdown = 1.15;
     this.publishCue();
   }
@@ -427,7 +523,9 @@ export class Arena {
 
     switch (this.guard) {
       case 'waiting':
-        hint = this.firstAttack
+        hint = this.forest
+          ? 'El Vigía se mueve entre las sombras. Atento al círculo rojo.'
+          : this.firstAttack
           ? 'El guardián se acerca. Su primer ataque es de práctica.'
           : 'Prepárate para el siguiente ataque.';
         break;
@@ -436,9 +534,14 @@ export class Arena {
         hint = 'Sal del círculo rojo. Pulsa Espacio sin dirección para alejarte.';
         break;
       case 'recovering':
-        if (this.closeToGuardian(SWORD_RANGE)) {
+        if (this.watcherHidden) {
+          if (this.closeToGuardian(LIGHT_RANGE)) action = 'H';
+          hint = action
+            ? 'Revela al Vigía con la luz de Brasa.'
+            : 'Entra en el círculo turquesa para revelar al Vigía.';
+        } else if (this.closeToGuardian(SWORD_RANGE)) {
           action = 'G';
-          hint = 'Golpea ahora para abrir la coraza.';
+          hint = this.forest ? 'Golpea ahora para abrir su defensa.' : 'Golpea ahora para abrir la coraza.';
         } else {
           hint = 'Entra en el círculo dorado para alcanzar al guardián con la espada.';
         }
@@ -446,7 +549,7 @@ export class Arena {
       case 'open':
         if (this.closeToGuardian(LIGHT_RANGE)) {
           action = 'H';
-          hint = 'Coraza abierta. Lanza la luz de la salamandra.';
+          hint = this.forest ? 'Defensa abierta. Lanza la luz de Brasa.' : 'Coraza abierta. Lanza la luz de la salamandra.';
         } else {
           hint = 'Entra en el círculo turquesa para lanzar la luz.';
         }
@@ -476,8 +579,10 @@ export class Arena {
     this.walking = false;
 
     if (!this.reducedMotion) {
-      this.prologue.beacon.update(this.time);
-      this.prologue.life.update(deltaTime, this.time, this.hero.position);
+      this.prologue?.beacon.update(this.time);
+      this.prologue?.life.update(deltaTime, this.time, this.hero.position);
+      this.forest?.bats.update(this.time);
+      this.forest?.path.update(this.time);
     }
 
     if (this.journey) {
@@ -489,8 +594,8 @@ export class Arena {
       this.updateBattle(deltaTime);
     }
 
-    this.updateCamera(deltaTime);
     this.updateVisuals(deltaTime);
+    this.updateCamera(deltaTime);
     this.renderer.render(this.scene, this.camera);
     this.frame = requestAnimationFrame(this.tick);
   };
@@ -500,7 +605,7 @@ export class Arena {
     const direction = this.dash > 0 ? this.dashDirection : this.movement;
     const distance = (this.dash > 0 ? 12.5 : 4.5) * dt;
     const movementRadius = this.journey ? ISLAND_RADIUS : ARENA_RADIUS;
-    const movementCenter = this.journey ? 0 : BATTLE_CENTER_Z;
+    const movementCenter = this.journey ? 0 : this.battleCenterZ;
 
     moveOnGround(
       this.hero.position,
@@ -545,12 +650,13 @@ export class Arena {
         this.sound.play('charge');
       }
     } else if (this.guard === 'charging' && this.countdown <= 0) {
-      this.sound.play('slam');
-      this.effects.slam(this.guardian.position);
+      this.sound.play(this.forest ? 'shadow' : 'slam');
+      this.effects.slam(this.guardian.position, STRIKE_RADIUS, !!this.forest);
+      this.slamPose = SLAM_POSE_TIME;
 
       if (!this.firstAttack && this.closeToGuardian(STRIKE_RADIUS) && this.dodgeGrace <= 0) {
         this.hurt = .3;
-        this.effects.burst(this.hero.position, 0xff895f);
+        this.effects.impact(this.hero.position.clone().setY(.85), 0xff895f, 1);
         this.state = { ...this.state, health: this.state.health - 1 };
         if (this.state.health === 0) {
           this.finish('lost');
@@ -564,6 +670,7 @@ export class Arena {
     } else if ((this.guard === 'recovering' || this.guard === 'open') && this.countdown <= 0) {
       this.guard = 'waiting';
       this.countdown = .55;
+      this.watcherRevealed = false;
     }
 
     const separation = towardHero.copy(this.hero.position).sub(this.guardian.position);
@@ -577,7 +684,7 @@ export class Arena {
         separation.z,
         ARENA_RADIUS,
         this.obstacles,
-        BATTLE_CENTER_Z,
+        this.battleCenterZ,
       );
     }
   }
@@ -586,20 +693,27 @@ export class Arena {
     this.strike = Math.max(0, this.strike - dt);
     this.pulse = Math.max(0, this.pulse - dt);
     this.hurt = Math.max(0, this.hurt - dt);
-    const swing = this.strike > 0 ? Math.sin(Math.PI * this.strike / .32) : 0;
-    this.sword.rotation.z = -.4 - swing * 2.2;
+    this.slamPose = Math.max(0, this.slamPose - dt);
+    const strikeProgress = 1 - this.strike / STRIKE_TIME;
+    const swing = Math.sin(Math.PI * strikeProgress);
+    const followThrough = this.slamPose / SLAM_POSE_TIME;
+    this.sword.rotation.z = -.4 - swing * 1.95;
+    this.sword.rotation.y = this.reducedMotion ? 0 : swing * (strikeProgress * 2.6 - 1.2);
+    this.effects.sword(this.hero.position, this.facing, strikeProgress, this.swordConnected);
+    this.effects.dodge(this.hero.position);
 
     const chargeProgress = this.guard === 'charging'
       ? T.MathUtils.clamp(1 - this.countdown / CHARGE_TIME, 0, 1)
       : 0;
-    this.golem.core.scale.setScalar(this.guard === 'open' ? 1.75 : 1);
-    this.golem.core.material.color.setHex(this.guard === 'open' ? 0x91ffcb : 0xff7935);
+    this.enemy.core.scale.setScalar(this.guard === 'open' ? 1.75 : 1 + chargeProgress * .55);
+    this.enemy.core.material.color.setHex(this.guard === 'open' ? 0x91ffcb : this.forest ? 0xc889ff : 0xff7935);
 
     this.guardianArms.forEach((arm, index) => {
       arm.position.y = .83 + chargeProgress * .53;
       const side = index === 0 ? -1 : 1;
       arm.position.x = side * (.45 + chargeProgress * .1);
       arm.rotation.z = side * chargeProgress * .46;
+      arm.rotation.x = this.reducedMotion ? 0 : -.95 * chargeProgress ** 1.35 + followThrough * .55;
     });
 
     if (!this.reducedMotion) {
@@ -612,13 +726,15 @@ export class Arena {
         foot.position.z = .015 + (index === 0 ? step : -step);
       });
       this.apprentice.scarf.rotation.z = Math.sin(this.time * 5) * (this.walking ? .16 : .045);
-      const heroLean = this.dash > 0 ? .28 : -this.hurt * 1.1;
+      const heroLean = this.dash > 0 ? .44 : swing * .19 - this.hurt * 1.1;
       this.hero.rotation.x = T.MathUtils.damp(this.hero.rotation.x, heroLean, 14, dt);
-      const guardianHeight = this.guard === 'recovering' ? .89 : 1 + chargeProgress * .12;
+      const guardianHeight = this.guard === 'recovering'
+        ? .91 - followThrough * .18
+        : 1 + chargeProgress * .17;
       this.guardian.scale.y = 1.62 * guardianHeight;
     }
 
-    this.effects.update(dt, STRIKE_RADIUS);
+    this.effects.update(dt);
     this.pet.position.x = T.MathUtils.damp(this.pet.position.x, this.hero.position.x - .72, 8, dt);
     this.pet.position.z = T.MathUtils.damp(this.pet.position.z, this.hero.position.z + .5, 8, dt);
     this.pet.position.y = this.reducedMotion ? .55 : .55 + Math.sin(this.time * 5) * .14;
@@ -628,21 +744,25 @@ export class Arena {
     this.brasa.tail.rotation.y = this.reducedMotion ? 0 : Math.sin(this.time * 8) * .25;
     this.brasaLight.update(this.pet, this.lightTarget, this.pulse, this.reducedMotion);
     this.warning.visible = this.state.phase === 'playing' && this.guard === 'charging';
+    this.effects.telegraph(this.guardian.position, STRIKE_RADIUS, this.warning.visible ? chargeProgress : -1, !!this.forest);
     this.warning.position.set(this.guardian.position.x, .045, this.guardian.position.z);
     this.chargeFill.visible = this.warning.visible;
     this.chargeFill.position.copy(this.warning.position);
     if (this.chargeFill.visible) {
-      this.chargeFill.scale.setScalar(T.MathUtils.clamp(1 - this.countdown / CHARGE_TIME, .015, 1));
+      this.chargeFill.scale.setScalar(Math.max(.015, chargeProgress));
+      this.chargeFill.material.opacity = .3 + chargeProgress * .25;
     }
 
-    const open = this.guard === 'open';
-    this.reach.visible = this.state.phase === 'playing' && (open || this.guard === 'recovering');
+    if (this.forest) this.guardian.visible = this.state.phase === 'playing' && !this.watcherHidden;
+    const recovering = this.guard === 'recovering';
+    const lightRange = this.guard === 'open' || (recovering && this.watcherHidden);
+    this.reach.visible = this.state.phase === 'playing' && (lightRange || recovering);
     this.reach.position.set(this.guardian.position.x, .05, this.guardian.position.z);
-    this.reach.scale.setScalar(open ? LIGHT_RANGE : SWORD_RANGE);
-    this.reach.material.color.setHex(open ? 0x8bf5d6 : 0xffda89);
+    this.reach.scale.setScalar(lightRange ? LIGHT_RANGE : SWORD_RANGE);
+    this.reach.material.color.setHex(lightRange ? 0x8bf5d6 : 0xffda89);
     this.flash.visible = this.pulse > 0;
     this.flash.position.set(this.hero.position.x, .07, this.hero.position.z);
-    const radius = Math.max(.05, LIGHT_RANGE * (1 - this.pulse / .45));
+    const radius = Math.max(.05, LIGHT_RANGE * (1 - this.pulse / LIGHT_DURATION));
     this.flash.scale.setScalar(this.reducedMotion ? LIGHT_RANGE : radius);
   }
 
@@ -656,6 +776,7 @@ export class Arena {
     const textures = new Set<T.Texture>();
     this.scene.traverse(object => {
       if (object instanceof T.Mesh) {
+        if (object instanceof T.InstancedMesh) object.dispose();
         object.geometry.dispose();
         const materials: T.Material[] = Array.isArray(object.material)
           ? object.material

@@ -1,12 +1,15 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, signal } from '@angular/core';
+import { Component, computed, signal } from '@angular/core';
+import { ChapterTwoComponent } from '../comic/chapter-two.component';
 import { ComicComponent } from '../comic/comic.component';
 import { GameComponent } from '../game/game.component';
+
+type Page = 'prologue' | 'island' | 'chapter-two' | 'forest';
 
 @Component({
   selector: 'faro-root',
   standalone: true,
-  imports: [ComicComponent, GameComponent, NgTemplateOutlet],
+  imports: [ComicComponent, ChapterTwoComponent, GameComponent, NgTemplateOutlet],
   template: `
     <ng-template #loadActions>
       <div class="game-loading-actions">
@@ -15,13 +18,18 @@ import { GameComponent } from '../game/game.component';
       </div>
     </ng-template>
 
-    @if (!playing()) {
-      <faro-comic (enterGame)="start()" />
+    @if (page() === 'prologue') {
+      <faro-comic (enterGame)="goTo('island')" />
+    } @else if (page() === 'chapter-two') {
+      <faro-chapter-two (land)="goTo('forest')" />
     }
 
     @if (playing()) {
       @defer (when playing()) {
-        <faro-game (exitGame)="returnHome()" />
+        <faro-game
+          [forestChapter]="page() === 'forest'"
+          (continueAdventure)="goTo('chapter-two')"
+          (exitGame)="returnHome()" />
       } @loading (after 200ms) {
         <main class="game-loading">
           <p role="status">Cargando el archipiélago…</p>
@@ -37,20 +45,20 @@ import { GameComponent } from '../game/game.component';
   `,
 })
 export class AppComponent {
-  readonly playing = signal(false);
+  readonly page = signal<Page>('prologue');
+  readonly playing = computed(() => this.page() === 'island' || this.page() === 'forest');
 
-  start() {
-    if (location.hash === '#tormenta') {
+  goTo(page: Page) {
+    if (location.hash === '#tormenta' || location.hash === '#vardren') {
       history.replaceState(history.state, '', location.pathname + location.search);
     }
 
-    this.playing.set(true);
+    this.page.set(page);
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
 
   returnHome() {
-    this.playing.set(false);
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    this.goTo('prologue');
   }
 
   reloadPage() {

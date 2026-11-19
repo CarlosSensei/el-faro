@@ -266,3 +266,25 @@ export function makeApprentice() {
   }
   return { model, feet, scarf };
 }
+
+export function makeWatcher() {
+  const model = new T.Group();
+  const mantle = 0x343349;
+  const robe = part(model, new T.ConeGeometry(.49, 1.28, 8), mantle, 0, .63, 0);
+  robe.rotation.z = Math.PI;
+  ellipsoid(model, 0x514664, [0, 1.03, -.09], [.52, .24, .24]);
+  ellipsoid(model, mantle, [0, 1.31, 0], [.28, .35, .26]);
+  ellipsoid(model, 0x181523, [0, 1.33, .2], [.18, .23, .09]);
+  for (const side of [-1, 1]) {
+    ellipsoid(model, 0xd6a7fd, [side * .078, 1.36, .287], [.037, .026, .012], true);
+    const arm = new T.Group();
+    arm.name = side < 0 ? 'leftArm' : 'rightArm';
+    arm.position.set(side * .45, .83, 0);
+    ellipsoid(arm, mantle, [side * .12, -.18, .05], [.16, .46, .16]).rotation.z = side * .37;
+    part(arm, new T.OctahedronGeometry(.17), 0x8c78a7, side * .26, -.45, .12);
+    model.add(arm);
+  }
+  const core = part(model, new T.OctahedronGeometry(.15), 0xc889ff, 0, .9, .24, true);
+  model.scale.setScalar(1.62);
+  return { model, core };
+}

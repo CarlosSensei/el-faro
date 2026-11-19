@@ -55,3 +55,7 @@ El aprendiz colisiona con las casas, las rocas del sendero, Mara, el pedestal y 
 ## Introducción ilustrada
 
 La página inicial cuenta el prólogo en tres ilustraciones originales. Desplázate hasta el final y pulsa «Entrar al juego» para cargar el motor 3D y abrir el menú. Las imágenes WebP están en `public/comic/` y se copian en la compilación estática.
+
+## Capítulo II · El bosque sin alba
+
+Tras derrotar al Guardián de Ceniza, pulsa «Continuar la aventura» para leer las tres viñetas y desembarcar en el Bosque del Alba. Usa **H** o **Luz** junto a las marcas para revelar el puente y las huellas. Usa **F** o **Interactuar** en las ruinas. Allí, esquiva el ataque, revela al Vigía con la luz, abre su defensa con la espada y vuelve a usar la luz para dañarlo. La victoria recupera la llama y muestra el hallazgo del mapa.

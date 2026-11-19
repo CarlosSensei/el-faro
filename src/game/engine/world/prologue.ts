@@ -36,10 +36,11 @@ export function buildPrologue() {
   }
   const lintel = mesh(new T.BoxGeometry(3.62, .32, .55), 0x777363);
   lintel.position.set(0, 2.5, LIGHTHOUSE_POSITION.z);
-  scenery.add(lintel);
   const rune = mesh(new T.OctahedronGeometry(.2), 0xffc169, true);
   rune.position.set(0, 2.77, LIGHTHOUSE_POSITION.z);
-  scenery.add(rune);
+  const archTop = new T.Group();
+  archTop.add(lintel, rune);
+  scenery.add(archTop);
 
   for (const x of [-4.5, 4.5]) {
     for (const z of [8, 13.2]) {
@@ -128,5 +129,5 @@ export function buildPrologue() {
     }
     obstacles.push({ x, z, radius: .24 });
   }
-  return { scenery, beacon, life, obstacles };
+  return { scenery, archTop, beacon, life, obstacles };
 }
