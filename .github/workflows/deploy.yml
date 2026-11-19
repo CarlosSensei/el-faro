@@ -34,7 +34,7 @@ jobs:
         run: npm ci
 
       - name: Build Angular
-        run: npm run build -- --base-href /el-faro/
+        run: npm run build -- --base-href /el-faro/ --output-hashing all
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

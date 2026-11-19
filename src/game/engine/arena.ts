@@ -33,8 +33,8 @@ const MOVEMENT_KEYS = new Set([
 ]);
 const KEY_ACTIONS: Readonly<Partial<Record<string, GameAction>>> = {
   KeyF: 'F',
-  KeyJ: 'J',
-  KeyE: 'E',
+  KeyG: 'G',
+  KeyH: 'H',
   Space: 'Espacio',
 };
 
@@ -189,7 +189,7 @@ export class Arena {
       if (this.near(GUIDE_POSITION)) action = 'F';
     } else if (!this.litBeacon && this.near(BEACON_POSITION, 2.4)) {
       objective = 'Enciende el tótem con la luz de Brasa.';
-      action = 'E';
+      action = 'H';
     } else {
       objective = this.litBeacon
         ? 'Explora la isla o sigue el camino al faro, al norte.'
@@ -216,7 +216,7 @@ export class Arena {
     const journey = this.journey;
     if (!journey || journey.dialogue) return;
 
-    if (action === 'E' && journey.action === 'E') {
+    if (action === 'H' && journey.action === 'H') {
       this.litBeacon = true;
       this.pulse = .45;
       this.lightTarget.copy(this.prologue.beacon.target);
@@ -355,8 +355,8 @@ export class Arena {
       this.dashCooldown = .65;
       this.sound.play('dodge');
     }
-    if (action === 'J' && this.strike <= 0) this.attackWithSword();
-    if (action === 'E' && this.pulse <= 0) this.castBrasaLight();
+    if (action === 'G' && this.strike <= 0) this.attackWithSword();
+    if (action === 'H' && this.pulse <= 0) this.castBrasaLight();
   }
 
   private keyUp = (event: KeyboardEvent) => {
@@ -437,7 +437,7 @@ export class Arena {
         break;
       case 'recovering':
         if (this.closeToGuardian(SWORD_RANGE)) {
-          action = 'J';
+          action = 'G';
           hint = 'Golpea ahora para abrir la coraza.';
         } else {
           hint = 'Entra en el círculo dorado para alcanzar al guardián con la espada.';
@@ -445,7 +445,7 @@ export class Arena {
         break;
       case 'open':
         if (this.closeToGuardian(LIGHT_RANGE)) {
-          action = 'E';
+          action = 'H';
           hint = 'Coraza abierta. Lanza la luz de la salamandra.';
         } else {
           hint = 'Entra en el círculo turquesa para lanzar la luz.';

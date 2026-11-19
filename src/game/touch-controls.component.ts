@@ -4,12 +4,12 @@ import type { GameAction } from './game.types';
 export const ACTION_LABELS: Record<GameAction, string> = {
   F: 'Interactuar',
   Espacio: 'Esquivar',
-  J: 'Espada',
-  E: 'Luz',
+  G: 'Espada',
+  H: 'Luz',
 };
 
-const EXPLORATION_ACTIONS: readonly GameAction[] = ['F', 'E'];
-const BATTLE_ACTIONS: readonly GameAction[] = ['Espacio', 'J', 'E'];
+const EXPLORATION_ACTIONS: readonly GameAction[] = ['F', 'H'];
+const BATTLE_ACTIONS: readonly GameAction[] = ['Espacio', 'G', 'H'];
 const DEAD_ZONE = .15;
 
 @Component({

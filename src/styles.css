@@ -266,6 +266,18 @@ button.audio-toggle:disabled {
   text-align: center;
 }
 
+.game-loading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.game-loading-actions button {
+  margin: 0;
+}
+
 .touch-layout {
   display: grid;
   grid-template-rows: auto minmax(275px, 1fr);

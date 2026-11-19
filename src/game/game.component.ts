@@ -124,9 +124,9 @@ import { ACTION_LABELS, TouchControlsComponent } from './touch-controls.componen
         <footer>
           <span><kbd>W A S D</kbd> o <kbd>↑ ← ↓ →</kbd> Mover</span>
           <span><kbd>F</kbd> Interactuar</span>
-          <span><kbd>J</kbd> Espada</span>
+          <span><kbd>G</kbd> Espada</span>
+          <span><kbd>H</kbd> Luz</span>
           <span><kbd>Espacio</kbd> Esquivar</span>
-          <span><kbd>E</kbd> Luz</span>
         </footer>
       }
     </main>
