@@ -81,6 +81,57 @@ export function makeMara() {
   return mara;
 }
 
+export type VillagerRole = 'farmer' | 'fisher' | 'traveler';
+
+export function makeVillager(role: VillagerRole, coat: number, skin: number) {
+  const model = new T.Group();
+  const leather = 0x523d34;
+  const shirt = 0xc4a77d;
+  const tunic = part(model, new T.CylinderGeometry(.22, .33, .64, 8), coat, 0, .8, 0);
+  tunic.scale.z = .74;
+  part(model, new T.CylinderGeometry(.28, .29, .075, 8), leather, 0, .72, 0).scale.z = .79;
+  const head = ellipsoid(model, skin, [0, 1.31, .03], [.194, .227, .18]);
+  ellipsoid(model, 0x43332d, [0, 1.41, -.027], [.196, .145, .18]);
+  ellipsoid(model, skin, [0, 1.29, .2], [.043, .052, .043]);
+
+  if (role === 'farmer') {
+    part(model, new T.CylinderGeometry(.22, .32, .06, 10), 0xcfaa62, 0, 1.44, 0);
+    part(model, new T.CylinderGeometry(.15, .23, .15, 10), 0xd3b477, 0, 1.54, 0);
+    part(model, new T.BoxGeometry(.29, .41, .045), 0xe1caa3, 0, .79, .222);
+  } else if (role === 'fisher') {
+    ellipsoid(model, coat, [0, 1.45, -.01], [.218, .116, .194]);
+    const rod = part(model, new T.CylinderGeometry(.018, .032, 1.63, 5), 0x835f39, .44, .88, .29);
+    rod.rotation.x = .64;
+    rod.rotation.z = -.27;
+  } else {
+    ellipsoid(model, 0x88583c, [0, 1.01, -.24], [.26, .27, .16]);
+    part(model, new T.BoxGeometry(.06, .46, .05), leather, -.1, .92, .192).rotation.z = -.36;
+    ellipsoid(model, shirt, [0, 1.11, .01], [.235, .063, .186]);
+  }
+
+  const arms: T.Group[] = [];
+  const legs: T.Group[] = [];
+  for (const side of [-1, 1]) {
+    const arm = new T.Group();
+    arm.position.set(side * .265, 1.035, 0);
+    arm.rotation.z = side * .17;
+    ellipsoid(arm, coat, [0, -.115, 0], [.094, .198, .092]);
+    ellipsoid(arm, skin, [0, -.282, .026], [.067, .079, .065]);
+    model.add(arm);
+    arms.push(arm);
+
+    const leg = new T.Group();
+    leg.position.set(side * .135, .51, 0);
+    part(leg, new T.CylinderGeometry(.097, .088, .38, 6), 0x48444a, 0, -.16, 0);
+    ellipsoid(leg, leather, [0, -.42, .049], [.107, .087, .146]);
+    model.add(leg);
+    legs.push(leg);
+  }
+  model.traverse(part => { part.castShadow = false; });
+  tunic.castShadow = head.castShadow = true;
+  return { model, arms, legs };
+}
+
 export function makeBrasa() {
   const body = new T.Group();
   ellipsoid(body, 0xf87a2e, [0, .02, 0], [.19, .145, .32]);

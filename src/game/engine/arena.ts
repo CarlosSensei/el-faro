@@ -3,7 +3,7 @@ import { GameSound } from './audio/game-sound';
 import { moveOnGround } from './combat/collision';
 import { BrasaLight, CombatEffects } from './combat/effects';
 import { makeApprentice, makeBrasa, makeGolem } from './entities/characters';
-import type { Battle, BattleAction, BattleCue, Journey, JourneyArea } from '../game.types';
+import type { Battle, BattleAction, BattleCue, GameAction, Journey, JourneyArea } from '../game.types';
 import {
   BATTLE_CENTER_Z,
   BEACON_POSITION,
@@ -21,7 +21,7 @@ const LIGHT_RANGE = 4.5;
 const CHARGE_TIME = 1.5;
 const DASH_TIME = .3;
 const ARENA_RADIUS = 7.2;
-const CONTROLS = new Set([
+const MOVEMENT_KEYS = new Set([
   'KeyW',
   'KeyA',
   'KeyS',
@@ -30,10 +30,13 @@ const CONTROLS = new Set([
   'ArrowLeft',
   'ArrowDown',
   'ArrowRight',
-  'KeyJ',
-  'KeyE',
-  'Space',
 ]);
+const KEY_ACTIONS: Readonly<Partial<Record<string, GameAction>>> = {
+  KeyF: 'F',
+  KeyJ: 'J',
+  KeyE: 'E',
+  Space: 'Espacio',
+};
 
 export class Arena {
   private readonly renderer = new T.WebGLRenderer({ antialias: true });
@@ -64,6 +67,7 @@ export class Arena {
   private walking = false;
   private walkPhase = 0;
   private readonly keys = new Set<string>();
+  private readonly touchMovement = new T.Vector3();
   private readonly facing = new T.Vector3(0, 0, -1);
   private readonly dashDirection = new T.Vector3();
   private readonly movement = new T.Vector3();
@@ -127,7 +131,7 @@ export class Arena {
     this.resize();
     window.addEventListener('keydown', this.keyDown);
     window.addEventListener('keyup', this.keyUp);
-    window.addEventListener('blur', this.clearKeys);
+    window.addEventListener('blur', this.clearInput);
     this.frame = requestAnimationFrame(this.tick);
   }
 
@@ -144,14 +148,14 @@ export class Arena {
     if (this.journey?.dialogue !== true) return;
     this.spokeToGuide = true;
     this.pet.visible = this.sword.visible = true;
-    this.keys.clear();
+    this.clearInput();
     this.journey = { ...this.journey, dialogue: false };
     this.updateObjective();
   }
 
   private resetJourney() {
     this.resetPositions(SPAWN_Z);
-    this.keys.clear();
+    this.clearInput();
     this.dash = 0;
     this.dashCooldown = 0;
     this.dodgeGrace = 0;
@@ -161,7 +165,7 @@ export class Arena {
     this.guard = 'waiting';
     this.guardian.visible = this.pet.visible = this.sword.visible = false;
     this.sanctuary.flameLight.visible = false;
-    this.prologue.lamp.material.color.setHex(0x7b867c);
+    this.prologue.beacon.setLit(false);
     this.journey = { area: 'village', objective: '', action: '', dialogue: false };
     this.updateCamera(0, true);
     this.updateObjective();
@@ -184,10 +188,12 @@ export class Arena {
       objective = 'Explora la isla. Habla con Mara en la aldea del sur para recoger la espada.';
       if (this.near(GUIDE_POSITION)) action = 'F';
     } else if (!this.litBeacon && this.near(BEACON_POSITION, 2.4)) {
-      objective = 'Prueba la luz de Brasa en el sello del sendero.';
+      objective = 'Enciende el tótem con la luz de Brasa.';
       action = 'E';
     } else {
-      objective = 'Explora la isla o sigue el camino al faro, al norte.';
+      objective = this.litBeacon
+        ? 'Explora la isla o sigue el camino al faro, al norte.'
+        : 'Busca el tótem a la derecha del sendero o sigue hacia el faro, al norte.';
       if (this.near(LIGHTHOUSE_POSITION, 2.1)) {
         objective = 'Despierta al Gólem de Ceniza cuando estés listo.';
         action = 'F';
@@ -206,28 +212,28 @@ export class Arena {
     return 'trail';
   }
 
-  private exploreAction(code: string) {
+  private exploreAction(action: GameAction) {
     const journey = this.journey;
     if (!journey || journey.dialogue) return;
 
-    if (code === 'KeyE' && journey.action === 'E') {
+    if (action === 'E' && journey.action === 'E') {
       this.litBeacon = true;
       this.pulse = .45;
-      this.lightTarget.copy(this.prologue.lamp.position);
+      this.lightTarget.copy(this.prologue.beacon.target);
       this.sound.play('light');
-      this.effects.burst(this.prologue.lamp.position, 0x8bf5d6);
-      this.prologue.lamp.material.color.setHex(0x91ffcb);
+      this.effects.burst(this.lightTarget, 0x8bf5d6);
+      this.prologue.beacon.setLit(true);
       this.updateObjective();
       return;
     }
 
-    if (code !== 'KeyF' || journey.action !== 'F') return;
+    if (action !== 'F' || journey.action !== 'F') return;
     if (this.spokeToGuide) {
       this.start(true);
       return;
     }
 
-    this.keys.clear();
+    this.clearInput();
     this.journey = { ...journey, dialogue: true };
     this.publishJourney(this.journey);
   }
@@ -246,7 +252,7 @@ export class Arena {
       this.pet.position.set(entryPosition.x - .75, .6, entryPosition.z + .4);
     }
     this.updateCamera(0, !entryPosition);
-    this.keys.clear();
+    this.clearInput();
     this.dash = 0;
     this.dashCooldown = 0;
     this.dodgeGrace = 0;
@@ -310,24 +316,34 @@ export class Arena {
   private keyDown = (event: KeyboardEvent) => {
     if (event.code === 'Space' && event.target instanceof HTMLButtonElement) return;
 
+    const action = KEY_ACTIONS[event.code];
+    const movementKey = MOVEMENT_KEYS.has(event.code);
+    if (!movementKey && !action) return;
     if (this.journey) {
-      if (this.journey.dialogue || (!CONTROLS.has(event.code) && event.code !== 'KeyF')) return;
-      event.preventDefault();
-      this.keys.add(event.code);
-      if (!event.repeat) {
-        this.exploreAction(event.code);
-      }
+      if (this.journey.dialogue) return;
+    } else if (this.state.phase !== 'playing' || action === 'F') {
       return;
     }
 
-    if (this.state.phase !== 'playing' || !CONTROLS.has(event.code)) return;
     event.preventDefault();
-    this.keys.add(event.code);
-    if (event.repeat) return;
+    if (movementKey) this.keys.add(event.code);
+    if (action && !event.repeat) this.performAction(action);
+  };
 
-    if (event.code === 'Space' && this.dashCooldown <= 0) {
+  setTouchMovement(x: number, y: number) {
+    this.touchMovement.set(x, 0, y);
+  }
+
+  performAction(action: GameAction) {
+    if (this.journey) {
+      this.exploreAction(action);
+      return;
+    }
+    if (this.state.phase !== 'playing') return;
+
+    if (action === 'Espacio' && this.dashCooldown <= 0) {
       this.readMovement();
-      this.dashDirection.copy(this.movement);
+      this.dashDirection.copy(this.movement).normalize();
       if (!this.dashDirection.lengthSq()) {
         const retreatDirection = this.guard === 'charging'
           ? this.hero.position.clone().sub(this.guardian.position).normalize()
@@ -339,23 +355,24 @@ export class Arena {
       this.dashCooldown = .65;
       this.sound.play('dodge');
     }
-    if (event.code === 'KeyJ' && this.strike <= 0) this.attackWithSword();
-    if (event.code === 'KeyE' && this.pulse <= 0) this.castBrasaLight();
-  };
+    if (action === 'J' && this.strike <= 0) this.attackWithSword();
+    if (action === 'E' && this.pulse <= 0) this.castBrasaLight();
+  }
 
   private keyUp = (event: KeyboardEvent) => {
     this.keys.delete(event.code);
   };
 
-  private clearKeys = () => {
+  private clearInput = () => {
     this.keys.clear();
+    this.touchMovement.set(0, 0, 0);
   };
 
   private readMovement() {
     const isPressed = (key: string, arrow: string) => Number(this.keys.has(key) || this.keys.has(arrow));
     const horizontal = isPressed('KeyD', 'ArrowRight') - isPressed('KeyA', 'ArrowLeft');
     const vertical = isPressed('KeyS', 'ArrowDown') - isPressed('KeyW', 'ArrowUp');
-    this.movement.set(horizontal, 0, vertical).normalize();
+    this.movement.set(horizontal, 0, vertical).add(this.touchMovement).clampLength(0, 1);
   }
 
   private closeToGuardian(range: number) {
@@ -448,7 +465,7 @@ export class Arena {
   private finish(phase: 'won' | 'lost') {
     this.state = { ...this.state, phase };
     this.warning.visible = false;
-    this.keys.clear();
+    this.clearInput();
     this.publish(this.state);
   }
 
@@ -457,6 +474,11 @@ export class Arena {
     this.previousTime = now;
     this.time += deltaTime;
     this.walking = false;
+
+    if (!this.reducedMotion) {
+      this.prologue.beacon.update(this.time);
+      this.prologue.life.update(deltaTime, this.time, this.hero.position);
+    }
 
     if (this.journey) {
       if (!this.journey.dialogue) {
@@ -491,7 +513,7 @@ export class Arena {
     this.walking = direction.lengthSq() > 0;
 
     if (this.walking) {
-      this.facing.copy(direction);
+      this.facing.copy(direction).normalize();
       this.hero.rotation.y = Math.atan2(direction.x, direction.z);
     }
   }
@@ -630,7 +652,7 @@ export class Arena {
     this.sound.dispose();
     window.removeEventListener('keydown', this.keyDown);
     window.removeEventListener('keyup', this.keyUp);
-    window.removeEventListener('blur', this.clearKeys);
+    window.removeEventListener('blur', this.clearInput);
     const textures = new Set<T.Texture>();
     this.scene.traverse(object => {
       if (object instanceof T.Mesh) {

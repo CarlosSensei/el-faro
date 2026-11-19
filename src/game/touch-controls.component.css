@@ -1,0 +1,103 @@
+:host {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-inline: clamp(2px, 2vw, 28px);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.joystick {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: clamp(94px, 18vw, 128px);
+  aspect-ratio: 1;
+  border: 1px solid #667e77;
+  border-radius: 50%;
+  background: radial-gradient(circle, #1d3333 0 46%, #53716a 47% 48%, #152629 49%);
+  color: #a6beb5;
+  cursor: grab;
+  touch-action: none;
+}
+
+.thumb {
+  width: 36%;
+  aspect-ratio: 1;
+  border: 1px solid #e3c38b;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #f6d9a2, #b98952);
+  box-shadow: 0 3px 10px #0008;
+  pointer-events: none;
+}
+
+.direction {
+  position: absolute;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.up { top: 5%; }
+.down { bottom: 5%; }
+.left { left: 7%; }
+.right { right: 7%; }
+
+.touch-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(68px, 1fr));
+  gap: 6px;
+}
+
+.touch-actions button {
+  min-height: 44px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid #71817b;
+  border-radius: 12px;
+  background: #203234;
+  color: #fff5dd;
+  font-size: .85rem;
+  touch-action: none;
+}
+
+.touch-actions [data-action="Espacio"] {
+  grid-column: 1 / -1;
+}
+
+.touch-actions [data-action="J"] { color: #ffd590; }
+.touch-actions [data-action="E"] { color: #a3efd5; }
+
+.touch-actions button:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+.touch-actions button.prompted {
+  border-color: currentColor;
+  background: #34433a;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.touch-actions button:active:not(:disabled) {
+  background: #fff0c8;
+  color: #182323;
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  :host { display: contents; }
+
+  .joystick {
+    grid-area: joystick;
+    align-self: end;
+    width: clamp(84px, 15vw, 110px);
+  }
+
+  .touch-actions {
+    grid-area: actions;
+    grid-template-columns: 1fr;
+    align-self: end;
+  }
+}

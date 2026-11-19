@@ -1,6 +1,8 @@
 import * as T from 'three';
 import { makeMara } from '../entities/characters';
 import type { Obstacle } from '../combat/collision';
+import { buildBeacon } from './beacon';
+import { buildIslandLife } from './island-life';
 import { mesh } from './sanctuary';
 import { createSurfaceTexture } from './surfaces';
 
@@ -13,7 +15,6 @@ export const SPAWN_Z = 14;
 
 export function buildPrologue() {
   const scenery = new T.Group();
-  const lamp = mesh(new T.OctahedronGeometry(.42), 0x7b867c, true);
   const obstacles: Obstacle[] = [];
   const stoneTexture = createSurfaceTexture('stone');
   const tileTexture = createSurfaceTexture('tiles', 2);
@@ -97,11 +98,10 @@ export function buildPrologue() {
       });
     }
   }
-  const pedestal = mesh(new T.CylinderGeometry(.28, .46, .84, 6), 0x8c8c75);
-  pedestal.position.set(BEACON_POSITION.x, .43, BEACON_POSITION.z);
-  lamp.position.set(BEACON_POSITION.x, 1.15, BEACON_POSITION.z);
-  scenery.add(pedestal, lamp);
-  obstacles.push({ ...BEACON_POSITION, radius: .46 });
+  const beacon = buildBeacon(BEACON_POSITION, stoneTexture);
+  const life = buildIslandLife();
+  scenery.add(beacon.model, life.group);
+  obstacles.push({ ...BEACON_POSITION, radius: .78 }, ...life.obstacles);
 
   for (let index = 0; index < 64; index++) {
     const angle = index * 2.39996;
@@ -128,5 +128,5 @@ export function buildPrologue() {
     }
     obstacles.push({ x, z, radius: .24 });
   }
-  return { scenery, lamp, obstacles };
+  return { scenery, beacon, life, obstacles };
 }

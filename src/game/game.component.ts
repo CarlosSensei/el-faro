@@ -1,12 +1,22 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, output, signal, viewChild } from '@angular/core';
 import { Arena } from './engine/arena';
-import type { Battle, Journey } from './game.types';
+import type { Battle, GameAction, Journey } from './game.types';
+import { ACTION_LABELS, TouchControlsComponent } from './touch-controls.component';
 
 @Component({
   selector: 'faro-game',
   standalone: true,
+  imports: [TouchControlsComponent],
   template: `
-    <main #gameMain tabindex="-1" aria-label="El Faro de las Brasas, juego">
+    @let route = journey();
+    @let combat = battle();
+    @let touchActive = touchEnabled() && !error() && (route ? !route.dialogue : combat.phase === 'playing');
+    <main
+      #gameMain
+      tabindex="-1"
+      aria-label="El Faro de las Brasas, juego"
+      [class.touch-layout]="touchEnabled()"
+      [class.touch-active]="touchActive">
       <header>
         <span class="wordmark">✦ &nbsp; EL FARO DE LAS BRASAS</span>
         <div class="header-actions">
@@ -41,7 +51,7 @@ import type { Battle, Journey } from './game.types';
           </div>
         }
 
-        @if (journey(); as route) {
+        @if (route) {
           @if (route.dialogue) {
             <div class="veil">
               <article role="dialog" aria-modal="true" aria-labelledby="mara-title">
@@ -49,7 +59,7 @@ import type { Battle, Journey } from './game.types';
                 <h1 id="mara-title">Mara</h1>
                 <p>
                   La luz del faro se apagó anoche. Los barcos siguen ahí fuera. Llévate mi espada y a
-                  Brasa. Podéis practicar su luz en el sello del sendero. Cuando lleguéis al faro,
+                  Brasa. Podéis practicar su luz en el tótem del sendero. Cuando lleguéis al faro,
                   buscad una grieta en la coraza del guardián.
                 </p>
                 <button #dialogueButton (click)="continueDialogue()">
@@ -60,7 +70,11 @@ import type { Battle, Journey } from './game.types';
           } @else {
             <p class="hint" role="status">
               @if (route.action) {
-                <kbd>{{ route.action }}</kbd>
+                @if (touchEnabled()) {
+                  <strong class="hint-action">{{ actionLabels[route.action] }}</strong>
+                } @else {
+                  <kbd>{{ route.action }}</kbd>
+                }
               }
               <span>{{ route.objective }}</span>
             </p>
@@ -85,22 +99,36 @@ import type { Battle, Journey } from './game.types';
             </article>
           </div>
         } @else {
-          <p class="hint" role="status" [attr.data-cue]="battle().cue">
-            @if (battle().action) {
-              <kbd>{{ battle().action }}</kbd>
+          <p class="hint" role="status" [attr.data-cue]="combat.cue">
+            @if (combat.action) {
+              @if (touchEnabled()) {
+                <strong class="hint-action">{{ actionLabels[combat.action] }}</strong>
+              } @else {
+                <kbd>{{ combat.action }}</kbd>
+              }
             }
-            <span>{{ battle().hint }}</span>
+            <span>{{ touchEnabled() && combat.cue === 'charging'
+              ? 'Sal del círculo rojo. Suelta el joystick y toca Esquivar para alejarte.'
+              : combat.hint }}</span>
           </p>
         }
       </section>
 
-      <footer>
-        <span><kbd>W A S D</kbd> o <kbd>↑ ← ↓ →</kbd> Mover</span>
-        <span><kbd>F</kbd> Interactuar</span>
-        <span><kbd>J</kbd> Espada</span>
-        <span><kbd>Espacio</kbd> Esquivar</span>
-        <span><kbd>E</kbd> Luz</span>
-      </footer>
+      @if (touchActive) {
+        <faro-touch-controls
+          [exploring]="!!route"
+          [prompt]="route ? route.action : combat.action"
+          (movement)="moveWithTouch($event)"
+          (action)="actWithTouch($event)" />
+      } @else if (!touchEnabled()) {
+        <footer>
+          <span><kbd>W A S D</kbd> o <kbd>↑ ← ↓ →</kbd> Mover</span>
+          <span><kbd>F</kbd> Interactuar</span>
+          <span><kbd>J</kbd> Espada</span>
+          <span><kbd>Espacio</kbd> Esquivar</span>
+          <span><kbd>E</kbd> Luz</span>
+        </footer>
+      }
     </main>
   `,
 })
@@ -108,8 +136,11 @@ export class GameComponent implements AfterViewInit, OnDestroy {
   private readonly gameMain = viewChild.required<ElementRef<HTMLElement>>('gameMain');
   private readonly viewport = viewChild.required<ElementRef<HTMLElement>>('viewport');
   private readonly dialogueButton = viewChild<ElementRef<HTMLButtonElement>>('dialogueButton');
+  private readonly touchMedia = window.matchMedia('(any-pointer: coarse)');
   private arena?: Arena;
 
+  readonly touchEnabled = signal(this.touchMedia.matches);
+  readonly actionLabels = ACTION_LABELS;
   readonly exitGame = output<void>();
   readonly journey = signal<Journey | null>(null);
   readonly battle = signal<Battle>({
@@ -123,6 +154,19 @@ export class GameComponent implements AfterViewInit, OnDestroy {
   readonly error = signal(false);
   readonly audioEnabled = signal(false);
   readonly audioPending = signal(false);
+
+  private readonly updateTouchEnabled = () => {
+    this.arena?.setTouchMovement(0, 0);
+    this.touchEnabled.set(this.touchMedia.matches);
+  };
+
+  moveWithTouch({ x, y }: { x: number; y: number }) {
+    this.arena?.setTouchMovement(x, y);
+  }
+
+  actWithTouch(action: GameAction) {
+    this.arena?.performAction(action);
+  }
 
   async toggleAudio(event: MouseEvent) {
     if (!this.arena || this.audioPending()) return;
@@ -141,6 +185,7 @@ export class GameComponent implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit() {
     this.gameMain().nativeElement.focus({ preventScroll: true });
+    this.touchMedia.addEventListener('change', this.updateTouchEnabled);
 
     try {
       this.arena = new Arena(
@@ -160,6 +205,7 @@ export class GameComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.touchMedia.removeEventListener('change', this.updateTouchEnabled);
     this.arena?.dispose();
   }
 

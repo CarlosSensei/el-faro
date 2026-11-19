@@ -4,7 +4,7 @@ Prototipo de RPG de acción 3D. El aprendiz y su salamandra se enfrentan al Guar
 
 ## Ejecutar en local
 
-Requiere Node.js 22.12 o superior y un navegador de escritorio con WebGL 2.
+Requiere Node.js 22.12 o superior y un navegador con WebGL 2.
 
 ```sh
 npm ci
@@ -21,6 +21,8 @@ Abre http://localhost:4200. El comando `npm run build` genera la web estática e
 | Espacio | Esquivar |
 | J | Atacar con la espada |
 | E | Invocar la luz de la salamandra |
+
+En móviles y tablets, el juego muestra un joystick a la izquierda y los botones disponibles a la derecha. Puedes mantener el joystick inclinado mientras pulsas un botón. En el combate, toca **Esquivar** para rodar en la dirección del joystick. Si lo sueltas durante la carga del guardián, la esquiva te aleja del golpe.
 
 El primer golpe del guardián es de práctica y no quita vida. El círculo rojo se llena antes del impacto. Pulsa Espacio sin dirección para alejarte del guardián durante la carga. Entra en el círculo dorado y pulsa J. Después, desde el círculo turquesa, pulsa E. El primer combo puede hacerse sin límite de tiempo. En las rondas siguientes tienes cinco segundos para usar la espada y seis para lanzar la luz. Tres impactos de luz completan el combate.
 
@@ -39,7 +41,7 @@ El primer golpe del guardián es de práctica y no quita vida. El círculo rojo 
 
 ## Prólogo
 
-Pulsa «Explorar la isla» para recorrer la costa, la aldea y el sendero en una sola escena. Usa **F** para hablar con Mara y recoger la espada. En el sendero puedes practicar **E** junto al sello. Cuando quieras combatir, acércate al arco al pie del faro y pulsa **F**. Si pierdes, puedes reintentar allí mismo. «Practicar combate» abre directamente el enfrentamiento.
+Pulsa «Explorar la isla» para recorrer la costa, la aldea y el sendero en una sola escena. Usa **F** para hablar con Mara y recoger la espada. En el sendero puedes encender el tótem con **E** o el botón **Luz**. Cuando quieras combatir, acércate al arco al pie del faro y pulsa **F**. Si pierdes, puedes reintentar allí mismo. «Practicar combate» abre directamente el enfrentamiento.
 
 ## Sonido y animación
 

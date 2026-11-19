@@ -11,6 +11,7 @@ export interface Journey {
 export type BattlePhase = 'ready' | 'playing' | 'won' | 'lost';
 export type BattleCue = 'waiting' | 'charging' | 'recovering' | 'open';
 export type BattleAction = '' | 'Espacio' | 'J' | 'E';
+export type GameAction = Exclude<JourneyAction | BattleAction, ''>;
 
 export interface Battle {
   phase: BattlePhase;

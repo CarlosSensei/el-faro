@@ -195,7 +195,8 @@ kbd {
   color: #fff5dd;
 }
 
-.hint kbd {
+.hint kbd,
+.hint-action {
   padding: 4px 8px;
   background: #ffd590;
   color: #182323;
@@ -206,7 +207,7 @@ kbd {
   border-color: #fb7766;
 }
 
-.hint[data-cue="charging"] kbd {
+.hint[data-cue="charging"] :is(kbd, .hint-action) {
   background: #fb927e;
 }
 
@@ -218,7 +219,7 @@ kbd {
   border-color: #8bf5d6;
 }
 
-.hint[data-cue="open"] kbd {
+.hint[data-cue="open"] :is(kbd, .hint-action) {
   background: #8bf5d6;
 }
 
@@ -263,4 +264,64 @@ button.audio-toggle:disabled {
 .game-loading {
   padding: 24px;
   text-align: center;
+}
+
+.touch-layout {
+  display: grid;
+  grid-template-rows: auto minmax(275px, 1fr);
+  gap: 10px;
+  height: 100dvh;
+  padding: 10px clamp(10px, 3vw, 32px);
+}
+
+.touch-layout.touch-active {
+  grid-template-rows: auto minmax(240px, 1fr) auto;
+}
+
+.touch-layout header {
+  margin: 0;
+  gap: 6px 14px;
+}
+
+.touch-layout .stage {
+  height: auto;
+  min-height: 0;
+}
+
+.touch-layout .veil {
+  align-items: safe center;
+  overflow: auto;
+}
+
+.touch-layout .hud {
+  inset: 8px 8px auto;
+}
+
+.touch-layout .hint {
+  bottom: 8px;
+  gap: 7px;
+  max-width: calc(100% - 16px);
+  padding: 6px 9px;
+  font-size: .85rem;
+}
+
+.touch-layout .hint-action {
+  border-radius: 4px;
+  font-size: .8rem;
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  .touch-layout {
+    grid-template-rows: auto minmax(240px, 1fr);
+  }
+
+  .touch-layout.touch-active {
+    grid-template:
+      "header header header" auto
+      "joystick stage actions" minmax(210px, 1fr)
+      / auto minmax(0, 1fr) minmax(80px, auto);
+  }
+
+  .touch-active header { grid-area: header; }
+  .touch-active .stage { grid-area: stage; }
 }
